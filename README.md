@@ -1,5 +1,7 @@
 # WebAgent Shield
 
+AI-powered prompt injection defense for web-browsing agents.
+
 Phases 1 and 2 implement a task-driven research agent and automatic HTML extraction. The agent searches using Tavily, chooses pages through an LLM with an OpenAI-compatible chat-completions endpoint, opens them in Playwright, and receives structured evidence with source locations.
 
 ## Local setup
