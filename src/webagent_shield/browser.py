@@ -60,7 +60,9 @@ async def scan_page(url: str, policy: Policy) -> dict:
                 await context.route("**/*", route_request)
                 await context.route_web_socket("**/*", lambda route: route.close())
                 page = await context.new_page()
-                await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                if response is None or response.status >= 400:
+                    raise ValueError("Page returned an unsuccessful HTTP response")
                 await page.wait_for_timeout(750)
                 # Mark computed CSS visibility in the snapshot for extraction.
                 await page.evaluate("""() => { for (const e of document.querySelectorAll('*')) {
@@ -70,12 +72,13 @@ async def scan_page(url: str, policy: Policy) -> dict:
                 rendered = await page.content()
                 if len(rendered) > 2_000_000:
                     raise ValueError("Rendered document exceeds size limit")
-                passages = []
+                raw_passages = []
                 for source_url, html in raw_documents:
-                    passages.extend(extract(html, source_url, "raw"))
-                passages.extend(extract(rendered, page.url, "rendered"))
-                return {"id": str(uuid4()), "url": page.url, **inspect(passages[:2000]),
-                        "coverage": {"partial": bool(blocked) or len(passages) > 2000,
+                    raw_passages.extend(extract(html, source_url, "raw"))
+                rendered_passages = extract(rendered, page.url, "rendered")
+                passages = rendered_passages[:1000] + raw_passages[:1000]
+                return {"id": str(uuid4()), "url": page.url, **inspect(passages),
+                        "coverage": {"partial": bool(blocked) or len(raw_passages) > 1000 or len(rendered_passages) > 1000,
                                      "blocked_requests": len(blocked), "snapshot_delay_ms": 750,
                                      "limitations": ["Main document only", "No closed shadow DOM", "Bounded dynamic snapshot"]}}
             finally:

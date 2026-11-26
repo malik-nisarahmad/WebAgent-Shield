@@ -64,6 +64,17 @@ class Gateway:
                 scan = await scan_page(arguments["url"], self.policy)
                 self.scans.append(scan)
                 output = evidence(scan)
+                # Keep full provenance in the saved scan and bound the LLM context.
+                compact = []
+                remaining = 2000
+                for passage in output["passages"]:
+                    if remaining <= 0:
+                        break
+                    text = passage["text"][:remaining]
+                    compact.append({"id": passage["id"], "text": text})
+                    remaining -= len(text)
+                output["coverage"]["context_truncated"] = sum(len(p["text"]) for p in output["passages"]) > 2000
+                output["passages"] = compact
             else:
                 raise ValueError("Unknown tool")
             event["decision"] = "allowed"
@@ -83,6 +94,23 @@ TOOLS = [
 ]
 
 
+async def request_completion(client, messages):
+    for attempt in range(3):
+        response = await client.post(
+            os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/") + "/chat/completions",
+            headers={"Authorization": f"Bearer {os.environ['LLM_API_KEY']}"},
+            json={"model": os.environ["LLM_MODEL"], "messages": messages,
+                  "tools": TOOLS, "max_completion_tokens": 600})
+        if response.status_code != 429 or attempt == 2:
+            response.raise_for_status()
+            return response
+        try:
+            delay = float(response.headers.get("retry-after", "30"))
+        except ValueError:
+            delay = 30
+        await asyncio.sleep(max(1, min(delay, 60)))
+
+
 async def run_agent(task: str) -> dict:
     required = ["LLM_API_KEY", "LLM_MODEL", "TAVILY_API_KEY", "ALLOWED_HOSTS"]
     missing = [name for name in required if not os.getenv(name)]
@@ -100,10 +128,7 @@ async def run_agent(task: str) -> dict:
         try:
             async with asyncio.timeout(180):
                 for _ in range(10):
-                    response = await client.post(os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/") + "/chat/completions",
-                        headers={"Authorization": f"Bearer {os.environ['LLM_API_KEY']}"},
-                        json={"model": os.environ["LLM_MODEL"], "messages": messages, "tools": TOOLS})
-                    response.raise_for_status()
+                    response = await request_completion(client, messages)
                     message = response.json()["choices"][0]["message"]
                     calls = message.get("tool_calls") or []
                     messages.append({key: message[key] for key in ("role", "content", "tool_calls") if key in message})
@@ -125,6 +150,8 @@ async def run_agent(task: str) -> dict:
         except Exception as error:
             run["status"] = "failed"
             run["error"] = type(error).__name__
+            if isinstance(error, httpx.HTTPStatusError):
+                run["provider_status"] = error.response.status_code
         finally:
             run["scans"] = gateway.scans
             run["actions"] = gateway.events

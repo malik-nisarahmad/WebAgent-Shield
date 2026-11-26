@@ -3,6 +3,14 @@ import hashlib
 from bs4 import BeautifulSoup, Comment
 
 
+def node_path(element) -> str:
+    parts = []
+    while element and element.name != "[document]":
+        parts.append(f"{element.name}[{len(element.find_previous_siblings(element.name)) + 1}]")
+        element = element.parent
+    return "/" + "/".join(reversed(parts))
+
+
 def extract(html: str, url: str, channel: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     passages = []
@@ -36,7 +44,7 @@ def extract(html: str, url: str, channel: str) -> list[dict]:
             value = element.get(attr)
             if value:
                 passages.append({"id": f"attribute-{len(passages)}", "text": str(value)[:1800],
-                                 "url": url, "channel": channel, "location": f"{element.name}@{attr}",
+                                 "url": url, "channel": channel, "location": f"{node_path(element)}/@{attr}",
                                  "kind": "attribute", "hidden": False, "eligible": False})
     return passages
 
@@ -47,6 +55,10 @@ def inspect(passages: list[dict]) -> dict:
 
 
 def evidence(scan: dict) -> dict:
+    eligible = [p for p in scan["passages"] if p["eligible"]]
+    coverage = dict(scan["coverage"])
+    coverage["evidence_truncated"] = len(eligible) > 80
+    coverage["partial"] = coverage.get("partial", False) or len(eligible) > 80
     return {"scan_id": scan["id"], "url": scan["url"],
-            "detector_status": scan["detector_status"], "coverage": scan["coverage"],
-            "passages": [p for p in scan["passages"] if p["eligible"]][:80]}
+            "detector_status": scan["detector_status"], "coverage": coverage,
+            "passages": eligible[:80]}
