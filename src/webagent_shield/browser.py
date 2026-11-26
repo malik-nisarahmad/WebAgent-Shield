@@ -49,7 +49,8 @@ async def scan_page(url: str, policy: Policy) -> dict:
                                     raise ValueError("Response exceeds size limit")
                             if request.is_navigation_request() and request.frame == context.pages[0].main_frame:
                                 if "text/html" in response.headers.get("content-type", ""):
-                                    raw_documents.append((request.url, bytes(body).decode(response.encoding or "utf-8", errors="replace")))
+                                    encoding = response.charset_encoding or "utf-8"
+                                    raw_documents.append((request.url, bytes(body).decode(encoding, errors="replace")))
                             headers = {key: value for key, value in response.headers.items()
                                        if key.lower() not in {"content-encoding", "content-length", "transfer-encoding", "set-cookie"}}
                             await route.fulfill(status=response.status_code, headers=headers, body=bytes(body))
