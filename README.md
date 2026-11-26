@@ -15,7 +15,7 @@ python -m venv .venv
 Copy-Item .env.example .env
 ```
 
-Fill in the API credentials, model name, and comma-separated exact hostnames in `.env`. Include the websites needed for your tasks and any necessary asset hosts. Credentials stay on the server. Then start the local API.
+Create a local `.env` file and fill in the API credentials, model name, and comma-separated exact hostnames. Credentials stay on the server and `.env` is ignored by Git. Include the websites needed for your tasks and any necessary asset hosts. Then start the local API.
 
 ```powershell
 .\.venv\Scripts\python -m uvicorn webagent_shield.api:app --host 127.0.0.1 --port 8000
@@ -42,4 +42,4 @@ Suggested tasks include comparing two documented Python features, locating a uni
 .\.venv\Scripts\python -m pytest
 ```
 
-Tests cover hidden-content handling, source provenance, destination scope, private-address rejection, and denial of unknown tools. Live acceptance requires configured API keys, Chromium, and an allowed public website. Run a task that needs two sources, verify both appear in `scans`, and verify the answer cites the opened sources.
+Tests cover hidden-content handling, source provenance, destination scope, private-address rejection, and denial of unknown tools. Live acceptance requires configured API keys, Chromium, and an allowed public website. Run a task that needs two sources, verify both appear in `scans`, and verify the answer cites the opened sources. If Python is not installed, install Python 3.11 or newer before creating `.venv`.
