@@ -16,8 +16,6 @@ def extract(html: str, url: str, channel: str) -> list[dict]:
     passages = []
     for node in soup.find_all(string=True):
         parent = node.parent
-        if parent.name in {"script", "style"}:
-            continue
         text = " ".join(str(node).split())
         if not text:
             continue
@@ -32,13 +30,14 @@ def extract(html: str, url: str, channel: str) -> list[dict]:
             ancestor = ancestor.parent
         location = "/" + "/".join(reversed(path))
         comment = isinstance(node, Comment)
+        embedded = parent.name in {"script", "style"}
         for offset in range(0, len(text), 1600):
             piece = text[offset:offset + 1800]
             passages.append({"id": hashlib.sha256(f"{url}|{channel}|{location}|{offset}|{piece}".encode()).hexdigest()[:20],
                              "text": piece, "url": url, "channel": channel,
                              "location": location, "normalized_offset": offset,
-                             "hidden": hidden, "kind": "comment" if comment else "text",
-                             "eligible": channel == "rendered" and not hidden and not comment})
+                             "hidden": hidden, "kind": "comment" if comment else "embedded" if embedded else "text",
+                             "eligible": channel == "rendered" and not hidden and not comment and not embedded})
     for element in soup.find_all(True):
         for attr in ("content", "title", "alt", "aria-label", "placeholder"):
             value = element.get(attr)
@@ -49,16 +48,22 @@ def extract(html: str, url: str, channel: str) -> list[dict]:
     return passages
 
 
-def inspect(passages: list[dict]) -> dict:
-    """Phase 2 boundary. A trained detector will replace this in phase 3."""
-    return {"detector_status": "not_trained", "findings": [], "passages": passages}
+def inspect(passages: list[dict], raw_html: str | None = None) -> dict:
+    """Scan raw HTML when available, otherwise scan the bounded passage text."""
+    from .detector import scan
+
+    content = raw_html if raw_html is not None else "\n".join(p.get("text", "") for p in passages)
+    return {**scan(content), "passages": passages}
 
 
 def evidence(scan: dict) -> dict:
-    eligible = [p for p in scan["passages"] if p["eligible"]]
+    page_blocked = any(finding.get("scope") == "page" for finding in scan.get("findings", []))
+    eligible = [] if page_blocked else [p for p in scan["passages"] if p["eligible"]]
     coverage = dict(scan["coverage"])
+    coverage["detector_blocked"] = page_blocked
     coverage["evidence_truncated"] = len(eligible) > 80
-    coverage["partial"] = coverage.get("partial", False) or len(eligible) > 80
+    coverage["partial"] = coverage.get("partial", False) or len(eligible) > 80 or page_blocked
     return {"scan_id": scan["id"], "url": scan["url"],
-            "detector_status": scan["detector_status"], "coverage": coverage,
+            "detector_status": scan["detector_status"], "findings": scan.get("findings", []),
+            "coverage": coverage,
             "passages": eligible[:80]}

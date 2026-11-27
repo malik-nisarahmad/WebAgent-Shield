@@ -2,7 +2,7 @@
 
 AI-powered prompt injection defense for web-browsing agents.
 
-Phases 1 and 2 implement a task-driven research agent and automatic HTML extraction. The agent searches using Tavily, chooses pages through an LLM with an OpenAI-compatible chat-completions endpoint, opens them in Playwright, and receives structured evidence with source locations.
+Phases 1 and 2 implement a task-driven research agent and automatic HTML extraction. Phase 3 adds validated classical prompt-injection baselines over raw HTML. No neural-model fine-tuning is implemented yet.
 
 ## Local setup
 
@@ -10,7 +10,7 @@ Install Python 3.11 or newer, then run in PowerShell.
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[test]"
+.\.venv\Scripts\python -m pip install -e ".[research,test]"
 .\.venv\Scripts\python -m playwright install chromium
 ```
 
@@ -26,9 +26,33 @@ For Groq, use `LLM_BASE_URL=https://api.groq.com/openai/v1` and a tool-calling m
 
 Suggested tasks include comparing two documented Python features, locating a university policy across approved pages, and summarizing two approved product specification pages. Configure the matching exact hostnames before each experiment.
 
+## Phase 3 classical baselines
+
+The research pipeline downloads the official BrowseSafe-Bench train/test Parquet files, verifies their published SHA-256 checksums, removes exact training duplicates and the one exact train/test overlap found by the preflight, adds the grouped local corpus in `data/local_corpus.jsonl`, and validates labels, groups, text, leakage, and TF-IDF shapes before fitting.
+
+```powershell
+# Download and validate only; no model is trained.
+.\.venv\Scripts\python -m webagent_shield.research.baselines --validate-only
+
+# Fit TF-IDF + logistic regression and TF-IDF + linear SVM.
+.\.venv\Scripts\python -m webagent_shield.research.baselines
+```
+
+The completed reference run used 11,053 training pages and 3,686 test pages. Logistic regression reached 0.7984 accuracy and 0.7976 balanced accuracy. Linear SVM reached 0.8098 accuracy and 0.8093 balanced accuracy, so it is the preferred classical baseline. Generated benchmark data, reports, and model files are intentionally git-ignored.
+
+To enable the preferred trained detector locally, add this to `.env` and restart the API:
+
+```dotenv
+SHIELD_MODEL_PATH=models/baselines/linear_svm.joblib
+# Optional runtime quarantine threshold; the default is 0.5.
+SHIELD_DECISION_THRESHOLD=0.5
+```
+
+The browser then classifies the raw rendered HTML before returning evidence. A page at or above the runtime decision threshold is quarantined. The reported benchmark metrics use each classifier's standard zero decision boundary; the separate runtime default of `0.5` reduces costly quarantine false positives and should be calibrated on a future validation split. `GET /health` reports `trained`, `not_trained`, or `error` for the configured detector.
+
 ## Current behavior and limits
 
-- Both search results and page evidence pass through an inspection interface. ML detection and fine-tuning are scheduled for phase 3. Every result currently reports `not_trained`, and empty findings do not indicate safety.
+- Both search results and page evidence pass through the inspection interface. The Phase 3 classical model is opt-in through `SHIELD_MODEL_PATH`; without it, results explicitly report `not_trained`. Neural fine-tuning remains deferred.
 - Raw HTML and a rendered snapshot are extracted automatically. Comments, hidden elements, and selected attributes are recorded for inspection. Only eligible rendered text is returned to the agent.
 - HTML nodes and attributes have structural locations. Text offsets refer to normalized passages. Original byte offsets, cross-view deduplication, and closed shadow DOM support remain future extraction improvements.
 - Rendering captures the main document after a bounded delay. Dynamic content arriving later and iframe content may be absent. Blocked requests and passage truncation produce partial-coverage flags.

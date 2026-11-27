@@ -78,7 +78,7 @@ async def scan_page(url: str, policy: Policy) -> dict:
                     raw_passages.extend(extract(html, source_url, "raw"))
                 rendered_passages = extract(rendered, page.url, "rendered")
                 passages = rendered_passages[:1000] + raw_passages[:1000]
-                return {"id": str(uuid4()), "url": page.url, **inspect(passages),
+                return {"id": str(uuid4()), "url": page.url, **inspect(passages, rendered),
                         "coverage": {"partial": bool(blocked) or len(raw_passages) > 1000 or len(rendered_passages) > 1000,
                                      "blocked_requests": len(blocked), "snapshot_delay_ms": 750,
                                      "limitations": ["Main document only", "No closed shadow DOM", "Bounded dynamic snapshot"]}}

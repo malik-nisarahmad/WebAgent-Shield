@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from .agent import load_run, run_agent
+from .detector import status as detector_status
 
 load_dotenv()
 app = FastAPI(title="WebAgent Shield", version="0.1.0")
@@ -13,7 +14,7 @@ class Task(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "phase": 2, "detector_status": "not_trained"}
+    return {"status": "ok", "phase": 3, "detector_status": detector_status()}
 
 
 @app.post("/v1/agent-runs")

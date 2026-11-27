@@ -10,6 +10,16 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1", "play
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
+research = [
+    "joblib>=1.4,<2",
+    "numpy>=2,<3",
+    "pandas>=2.2,<4",
+    "pyarrow>=18,<24",
+    "scikit-learn>=1.5,<2",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+cache_dir = "artifacts/pytest-cache"
